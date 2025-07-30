@@ -6,6 +6,7 @@ from rich.progress import Progress, BarColumn, TextColumn, ProgressColumn
 from rich.table import Table
 from rich.text import Text
 
+# Custom columns for units
 class VoltageColumn(ProgressColumn):
     def render(self, task):
         return Text(f"{task.completed:.2f} V")
@@ -18,69 +19,88 @@ class PercentColumn(ProgressColumn):
     def render(self, task):
         return Text(f"{task.completed:.0f} %")
 
-# Initialize console and progress bars
+# Console and battery initial state
 console = Console()
-battery_charge = 100.0  # in %
+battery_charge = 100.0
 last_discharge_time = time.time()
 
-progress = Progress(
+# Initialize progress bars
+voltage_bar = Progress(
     TextColumn("[bold blue]Battery Voltage:"),
     BarColumn(bar_width=30),
     VoltageColumn(),
     expand=True,
 )
 
-battery_bar = Progress(
-    TextColumn("[bold green]Battery Charge:"),
+charge_bar = Progress(
+    TextColumn("[bold green]Battery Charge: "),
     BarColumn(bar_width=30),
     PercentColumn(),
     expand=True,
 )
 
-motor_temp_bar = Progress(
+motor_bar = Progress(
     TextColumn("[bold red]Motor Temp:      "),
     BarColumn(bar_width=30),
     TemperatureColumn(),
     expand=True,
 )
 
-cpu_temp_bar = Progress(
+cpu_bar = Progress(
     TextColumn("[bold yellow]CPU Temp:        "),
     BarColumn(bar_width=30),
     TemperatureColumn(),
     expand=True,
 )
 
-battery_task = progress.add_task("battery_voltage", total=15.0, completed=12.6)
-charge_task = battery_bar.add_task("battery_charge", total=100.0, completed=battery_charge)
-motor_task = motor_temp_bar.add_task("motor_temp", total=120.0, completed=40.0)
-cpu_task = cpu_temp_bar.add_task("cpu_temp", total=100.0, completed=50.0)
+# Add tasks to each bar
+voltage_task = voltage_bar.add_task("voltage", total=15.0, completed=12.6)
+charge_task = charge_bar.add_task("charge", total=100.0, completed=battery_charge)
+motor_task = motor_bar.add_task("motor", total=120.0, completed=40.0)
+cpu_task = cpu_bar.add_task("cpu", total=100.0, completed=50.0)
 
-# Create layout
+# Start the bars (required to render inside Live)
+voltage_bar.start()
+charge_bar.start()
+motor_bar.start()
+cpu_bar.start()
+
+# Layout builder
 def generate_layout():
     table = Table.grid(padding=1)
-    table.add_row(progress)
-    table.add_row(battery_bar)
-    table.add_row(motor_temp_bar)
-    table.add_row(cpu_temp_bar)
+    table.add_row(voltage_bar)
+    table.add_row(charge_bar)
+    table.add_row(motor_bar)
+    table.add_row(cpu_bar)
     return table
 
+# Live dashboard loop
 with Live(generate_layout(), refresh_per_second=2, screen=False) as live:
-    while True:
-        # Simulate realistic sensor values
-        battery_voltage = random.uniform(11.8, 12.7)
-        motor_temp = random.uniform(35, 60)
-        cpu_temp = random.uniform(45, 70)
+    try:
+        while True:
+            now = time.time()
 
-        now = time.time()
-        if now - last_discharge_time >= 10:
-            battery_charge = max(0.0, battery_charge - random.uniform(1, 3))
-            last_discharge_time = now
+            # Simulate values
+            battery_voltage = random.uniform(11.8, 12.7)
+            motor_temp = random.uniform(35.0, 60.0)
+            cpu_temp = random.uniform(45.0, 70.0)
 
-        # Update tasks
-        progress.update(battery_task, completed=battery_voltage)
-        battery_bar.update(charge_task, completed=battery_charge)
-        motor_temp_bar.update(motor_task, completed=motor_temp)
-        cpu_temp_bar.update(cpu_task, completed=cpu_temp)
+            # Discharge battery every 10s
+            if now - last_discharge_time >= 10:
+                battery_charge = max(0.0, battery_charge - random.uniform(1.0, 3.0))
+                last_discharge_time = now
 
-        time.sleep(1)
+            # Update progress bars
+            voltage_bar.update(voltage_task, completed=battery_voltage)
+            charge_bar.update(charge_task, completed=battery_charge)
+            motor_bar.update(motor_task, completed=motor_temp)
+            cpu_bar.update(cpu_task, completed=cpu_temp)
+
+            time.sleep(1)
+
+    finally:
+        # Stop all progress bars on exit
+        voltage_bar.stop()
+        charge_bar.stop()
+        motor_bar.stop()
+        cpu_bar.stop()
