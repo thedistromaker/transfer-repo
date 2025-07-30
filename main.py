@@ -1,46 +1,86 @@
-from rich.progress import Progress, BarColumn, TextColumn
-from rich.live import Live
-from rich.table import Table
 import time
 import random
+from rich.console import Console
+from rich.live import Live
+from rich.progress import Progress, BarColumn, TextColumn, ProgressColumn
+from rich.table import Table
+from rich.text import Text
 
-def get_mock_data():
-    return {
-        "Battery Voltage": round(random.uniform(10.5, 13.0), 2),  # volts
-        "Motor Temp": round(random.uniform(30.0, 90.0), 1),       # Celsius
-        "CPU Temp": round(random.uniform(40.0, 75.0), 1),         # Celsius
-    }
+class VoltageColumn(ProgressColumn):
+    def render(self, task):
+        return Text(f"{task.completed:.2f} V")
 
-def scale_value(value, min_val, max_val):
-    """Scale value to 0-100 range."""
-    return max(0, min(100, int((value - min_val) / (max_val - min_val) * 100)))
+class TemperatureColumn(ProgressColumn):
+    def render(self, task):
+        return Text(f"{task.completed:.1f} °C")
 
-def make_table(data):
-    table = Table(title="System Telemetry", expand=True)
+class PercentColumn(ProgressColumn):
+    def render(self, task):
+        return Text(f"{task.completed:.0f} %")
 
-    table.add_column("Metric")
-    table.add_column("Value", justify="right")
-    table.add_column("Progress")
+# Initialize console and progress bars
+console = Console()
+battery_charge = 100.0  # in %
+last_discharge_time = time.time()
 
-    for name, value in data.items():
-        if name == "Battery Voltage":
-            percent = scale_value(value, 10.0, 13.0)
-        elif name == "Motor Temp":
-            percent = scale_value(value, 20.0, 100.0)
-        elif name == "CPU Temp":
-            percent = scale_value(value, 30.0, 85.0)
-        else:
-            percent = 0
+progress = Progress(
+    TextColumn("[bold blue]Battery Voltage:"),
+    BarColumn(bar_width=30),
+    VoltageColumn(),
+    expand=True,
+)
 
-        progress_bar = f"[blue]{'█' * (percent // 5)}{' ' * (20 - percent // 5)}[/]"
-        table.add_row(name, f"{value}", progress_bar)
+battery_bar = Progress(
+    TextColumn("[bold green]Battery Charge:"),
+    BarColumn(bar_width=30),
+    PercentColumn(),
+    expand=True,
+)
 
+motor_temp_bar = Progress(
+    TextColumn("[bold red]Motor Temp:      "),
+    BarColumn(bar_width=30),
+    TemperatureColumn(),
+    expand=True,
+)
+
+cpu_temp_bar = Progress(
+    TextColumn("[bold yellow]CPU Temp:        "),
+    BarColumn(bar_width=30),
+    TemperatureColumn(),
+    expand=True,
+)
+
+battery_task = progress.add_task("battery_voltage", total=15.0, completed=12.6)
+charge_task = battery_bar.add_task("battery_charge", total=100.0, completed=battery_charge)
+motor_task = motor_temp_bar.add_task("motor_temp", total=120.0, completed=40.0)
+cpu_task = cpu_temp_bar.add_task("cpu_temp", total=100.0, completed=50.0)
+
+# Create layout
+def generate_layout():
+    table = Table.grid(padding=1)
+    table.add_row(progress)
+    table.add_row(battery_bar)
+    table.add_row(motor_temp_bar)
+    table.add_row(cpu_temp_bar)
     return table
 
-if __name__ == "__main__":
-    with Live(refresh_per_second=4) as live:
-        while True:
-            mock_data = get_mock_data()
-            table = make_table(mock_data)
-            live.update(table)
-            time.sleep(1)
+with Live(generate_layout(), refresh_per_second=2, screen=False) as live:
+    while True:
+        # Simulate realistic sensor values
+        battery_voltage = random.uniform(11.8, 12.7)
+        motor_temp = random.uniform(35, 60)
+        cpu_temp = random.uniform(45, 70)
+
+        now = time.time()
+        if now - last_discharge_time >= 10:
+            battery_charge = max(0.0, battery_charge - random.uniform(1, 3))
+            last_discharge_time = now
+
+        # Update tasks
+        progress.update(battery_task, completed=battery_voltage)
+        battery_bar.update(charge_task, completed=battery_charge)
+        motor_temp_bar.update(motor_task, completed=motor_temp)
+        cpu_temp_bar.update(cpu_task, completed=cpu_temp)
+
+        time.sleep(1)
